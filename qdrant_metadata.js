@@ -42,6 +42,12 @@ const documents = [
         department: "HR",
         source: "employee_handbook.pdf",
         page: 39
+    },
+    {
+    text: "The finance department prepares the company's annual budget.",
+    department: "Finance",
+    source: "finance_policy.pdf",
+    page: 5
     }
 ];
 
