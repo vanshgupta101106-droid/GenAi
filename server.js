@@ -1,10 +1,15 @@
 import express from "express";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import { QdrantClient } from "@qdrant/js-client-rest";
 
 dotenv.config();
 
 const app = express();
+const qdrantClient = new QdrantClient({
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY
+});
 
 app.use(express.json());
 
