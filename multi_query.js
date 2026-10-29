@@ -111,18 +111,91 @@ for (const result of allResults) {
 const rankedResults = [...uniqueResults.values()]
     .sort((a, b) => b.score - a.score);
 
+const candidates = rankedResults
+    .map((result, index) => `
+Document ${index + 1}:
+${result.payload.text}
+`)
+    .join("\n");
+
+const rerankPrompt = `
+You are a document relevance evaluator.
+
+User question:
+${question}
+
+Evaluate how relevant each document is to the question.
+
+Give each document a relevance score from 0 to 100.
+
+100 = directly answers the question
+0 = completely irrelevant
+
+Documents:
+${candidates}
+
+Return a JSON array in exactly this format:
+
+[
+  {"document": 1, "score": 100},
+  {"document": 2, "score": 0},
+  {"document": 3, "score": 0},
+  {"document": 4, "score": 0}
+]
+`;
+
+const rerankResponse = await client.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: rerankPrompt,
+    config: {
+        responseMimeType: "application/json"
+    }
+});
+
+const rerankScores = JSON.parse(rerankResponse.text);
+
+rankedResults.forEach((result, index) => {
+
+    result.rerankScore = rerankScores[index].score;
+
+});
+
+console.log("\nRESULTS WITH RERANK SCORES:");
+
+for (const result of rankedResults) {
+
+    console.log("\nID:", result.id);
+    console.log("Vector Score:", result.score);
+    console.log("Rerank Score:", result.rerankScore);
+    console.log("Text:", result.payload.text);
+}
+
+const rerankedResults = [...rankedResults]
+    .sort((a, b) => b.rerankScore - a.rerankScore);
+
+console.log("\nFINAL RERANKED RESULTS:");
+
+for (const result of rerankedResults) {
+
+    console.log("\nID:", result.id);
+    console.log("Vector Score:", result.score);
+    console.log("Rerank Score:", result.rerankScore);
+    console.log("Text:", result.payload.text);
+}
+
+
 // STEP 5: FILTER RELEVANT RESULTS
 
-const threshold = 0.70;
+const rerankThreshold = 50;
 
-const relevantResults = rankedResults.filter(
-    result => result.score >= threshold
+const relevantResults = rerankedResults.filter(
+    result => result.rerankScore >= rerankThreshold
 );
 
 console.log("\nRELEVANT RESULTS:");
 
 for (const result of relevantResults) {
-    console.log("\nScore:", result.score);
+    console.log("\nScore:", result.rerankScore);
     console.log("Text:", result.payload?.text);
 }
 
