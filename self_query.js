@@ -146,9 +146,48 @@ console.log("\nGENERATING FINAL ANSWER...");
 
 const finalResponse =
     await client.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.5-flash",
         contents: finalPrompt
     });
 
 console.log("\nFINAL ANSWER:");
 console.log(finalResponse.text);
+
+if (!secondEvaluation.relevant) {
+
+    console.log("\nCRAG: RETRIEVAL STILL NOT RELEVANT.");
+    console.log("CRAG: Using fallback knowledge source...");
+
+    const externalKnowledge = `
+    Employee Stock Option Plans (ESOPs) are programs that may
+    provide eligible employees with the right to acquire company
+    shares under specified terms. An ESOP policy may define
+    eligibility, the number of options granted, vesting schedules,
+    exercise rules, and expiration conditions.
+    `;
+
+    const fallbackPrompt = `
+    Answer the user's question using only the fallback knowledge
+    provided below.
+
+    Fallback knowledge:
+    ${externalKnowledge}
+
+    Question:
+    ${question}
+
+    If the fallback knowledge does not contain the answer,
+    say "I don't know."
+
+    Answer clearly and concisely.
+    `;
+
+    const fallbackResponse =
+        await client.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: fallbackPrompt
+        });
+
+    console.log("\nFINAL ANSWER:");
+    console.log(fallbackResponse.text);
+}
