@@ -135,6 +135,88 @@ try {
         (averageRecall * 100).toFixed(2) + "%"
     );
 
+    let totalContextPrecision = 0;
+
+for (const item of evaluationData) {
+
+    const embeddingResponse =
+        await client.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: item.question
+        });
+
+    const queryEmbedding =
+        embeddingResponse.embeddings[0].values;
+
+    const searchResponse =
+        await qdrant.query(
+            COLLECTION_NAME,
+            {
+                query: queryEmbedding,
+                limit: 3,
+                with_payload: true
+            }
+        );
+
+    let relevantCount = 0;
+    let precisionSum = 0;
+
+    for (let i = 0; i < searchResponse.points.length; i++) {
+
+        const retrievedResult =
+            searchResponse.points[i];
+
+        const found =
+            item.relevantTexts.some(
+                expectedText =>
+                    retrievedResult.payload.text
+                        .toLowerCase()
+                        .includes(
+                            expectedText.toLowerCase()
+                        )
+            );
+
+        if (found) {
+
+            relevantCount++;
+
+            const precisionAtK =
+                relevantCount / (i + 1);
+
+            precisionSum += precisionAtK;
+        }
+    }
+
+    let contextPrecision = 0;
+
+    if (relevantCount > 0) {
+        contextPrecision =
+            precisionSum / relevantCount;
+    }
+
+    console.log(
+        "\nQuestion:",
+        item.question
+    );
+
+    console.log(
+        "Context Precision:",
+        contextPrecision
+    );
+
+    totalContextPrecision += contextPrecision;
+}
+
+const averageContextPrecision =
+    totalContextPrecision /
+    evaluationData.length;
+
+console.log(
+    "\nAVERAGE CONTEXT PRECISION:",
+    averageContextPrecision
+);
+
+
 } catch (error) {
     console.error("Evaluation failed:");
     console.error(error);
