@@ -2,6 +2,7 @@
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { tavily } from "@tavily/core";
 
 dotenv.config();
 
@@ -14,7 +15,12 @@ const qdrant = new QdrantClient({
     apiKey: process.env.QDRANT_API_KEY
 });
 
+const tvly = tavily({
+    apiKey: process.env.TAVILY_API_KEY
+});
+
 const COLLECTION_NAME = "employee_documents";
+const MODEL = "gemini-3.7-flash";
 
 const question =
     "What is the company's stock option policy?";
@@ -29,7 +35,7 @@ const embeddingResponse =
 const queryEmbedding =
     embeddingResponse.embeddings[0].values;
 
-// STEP 2: Initial retrieval
+// STEP 2: Initial Qdrant retrieval
 const searchResponse =
     await qdrant.query(
         COLLECTION_NAME,
@@ -40,7 +46,7 @@ const searchResponse =
         }
     );
 
-console.log("\nRETRIEVED DOCUMENTS:");
+console.log("\nINITIAL RETRIEVED DOCUMENTS:");
 
 for (const result of searchResponse.points) {
     console.log("\nID:", result.id);
@@ -52,7 +58,7 @@ const context = searchResponse.points
     .map(result => result.payload.text)
     .join("\n");
 
-// STEP 3: Evaluate retrieved documents
+// STEP 3: Evaluate initial retrieval
 const evaluationPrompt = `
 You are a retrieval evaluator.
 
@@ -63,7 +69,7 @@ Question:
 ${question}
 
 Retrieved documents:
-${context}
+${context || "No documents retrieved."}
 
 Return ONLY valid JSON:
 
@@ -78,7 +84,7 @@ Use:
 
 const evaluationResponse =
     await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: MODEL,
         contents: evaluationPrompt,
         config: {
             responseMimeType: "application/json"
@@ -88,8 +94,10 @@ const evaluationResponse =
 const evaluation =
     JSON.parse(evaluationResponse.text);
 
-console.log("\nRETRIEVAL EVALUATION:");
+console.log("\nINITIAL RETRIEVAL EVALUATION:");
 console.log(evaluation);
+
+let finalContext = context;
 
 // STEP 4: Corrective retrieval
 if (!evaluation.relevant) {
@@ -114,7 +122,7 @@ ${question}
 
     const correctionResponse =
         await client.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: MODEL,
             contents: correctionPrompt
         });
 
@@ -134,8 +142,8 @@ ${question}
     const correctedEmbedding =
         correctedEmbeddingResponse.embeddings[0].values;
 
-    // STEP 6: Search again
-    console.log("\nSEARCHING AGAIN WITH CORRECTED QUERY...");
+    // STEP 6: Search Qdrant again
+    console.log("\nSEARCHING QDRANT AGAIN...");
 
     const correctedSearchResponse =
         await qdrant.query(
@@ -156,12 +164,12 @@ ${question}
         console.log("--------------------");
     }
 
-    // STEP 7: Evaluate corrected results
     const correctedContext =
         correctedSearchResponse.points
             .map(result => result.payload.text)
             .join("\n");
 
+    // STEP 7: Evaluate corrected retrieval
     const secondEvaluationPrompt = `
 You are a retrieval evaluator.
 
@@ -172,7 +180,7 @@ Question:
 ${question}
 
 Retrieved documents:
-${correctedContext}
+${correctedContext || "No documents retrieved."}
 
 Return ONLY valid JSON:
 
@@ -187,7 +195,7 @@ Use:
 
     const secondEvaluationResponse =
         await client.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: MODEL,
             contents: secondEvaluationPrompt,
             config: {
                 responseMimeType: "application/json"
@@ -200,6 +208,68 @@ Use:
     console.log("\nSECOND RETRIEVAL EVALUATION:");
     console.log(secondEvaluation);
 
-} else {
-    console.log("\nINITIAL RETRIEVAL IS RELEVANT.");
+    // STEP 8: Use corrected context or Tavily fallback
+    if (secondEvaluation.relevant) {
+
+        console.log("\nCORRECTED RETRIEVAL IS RELEVANT.");
+
+        finalContext = correctedContext;
+
+    } else {
+
+        console.log("\nQDRANT RETRIEVAL FAILED.");
+        console.log("SEARCHING THE WEB USING TAVILY...");
+
+        // STEP 9: External web search
+        const webResponse =
+            await tvly.search(correctedQuery);
+
+        console.log("\nEXTERNAL SEARCH RESULTS:");
+
+        for (const result of webResponse.results) {
+            console.log("TITLE:", result.title);
+            console.log("URL:", result.url);
+            console.log("CONTENT:", result.content);
+            console.log("--------------------");
+        }
+
+        const externalKnowledge =
+            webResponse.results
+                .map(result => `
+Title: ${result.title}
+URL: ${result.url}
+Content: ${result.content}
+`)
+                .join("\n");
+
+        finalContext = externalKnowledge;
+    }
 }
+
+// STEP 10: Generate final answer
+console.log("\nGENERATING FINAL ANSWER...");
+
+const finalPrompt = `
+Answer the user's question using the external search
+results provided below.
+
+Question:
+${question}
+
+External search results:
+${finalContext}
+
+Use only information supported by the search results.
+If the search results do not contain enough information,
+say "I don't know."
+
+Give a clear and concise answer.
+`;
+const finalResponse =
+    await client.models.generateContent({
+        model: MODEL,
+        contents: finalPrompt
+    });
+
+console.log("\nFINAL ANSWER:");
+console.log(finalResponse.text);
