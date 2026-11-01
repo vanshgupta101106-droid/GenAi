@@ -57,6 +57,7 @@ try {
     let totalContextPrecision = 0;
     let totalContextRecall = 0;
     let totalFaithfulness = 0;
+    let totalAnswerRelevance = 0;
 
     for (const item of evaluationData) {
         console.log("\n=================================");
@@ -95,7 +96,17 @@ try {
             console.log("Text:", result.payload?.text);
         });
 
-        // STEP 3: Calculate Recall@3
+        // STEP 3: Prepare context
+        const context =
+            retrievedPoints
+                .map(result => result.payload?.text || "")
+                .filter(Boolean)
+                .join("\n");
+
+        console.log("\nRETRIEVED CONTEXT:");
+        console.log(context);
+
+        // STEP 4: Calculate Recall@3
         let relevantRetrieved = 0;
 
         for (const relevantText of item.relevantTexts) {
@@ -118,7 +129,7 @@ try {
 
         totalRecall += recall;
 
-        // STEP 4: Calculate Context Precision
+        // STEP 5: Calculate Context Precision
         let relevantCount = 0;
         let precisionSum = 0;
 
@@ -153,7 +164,7 @@ try {
 
         totalContextPrecision += contextPrecision;
 
-        // STEP 5: Calculate Context Recall
+        // STEP 6: Calculate Context Recall
         const contextRecall =
             relevantRetrieved / item.relevantTexts.length;
 
@@ -163,16 +174,6 @@ try {
         );
 
         totalContextRecall += contextRecall;
-
-        // STEP 6: Prepare context
-        const context =
-            retrievedPoints
-                .map(result => result.payload?.text || "")
-                .filter(Boolean)
-                .join("\n");
-
-        console.log("\nCONTEXT:");
-        console.log(context);
 
         // STEP 7: Generate answer
         const answerPrompt = `
@@ -226,8 +227,7 @@ try {
         }
 
         Set faithful to:
-        - true if every factual claim in the answer is supported
-        by the context
+        - true if every factual claim is supported by the context
         - false if any factual claim is unsupported
 
         Do not use outside knowledge.
@@ -250,14 +250,66 @@ try {
         console.log("Reason:", faithfulness.reason);
 
         if (faithfulness.faithful) {
-            console.log("RESULT: FAITHFUL");
             totalFaithfulness++;
+            console.log("RESULT: FAITHFUL");
         } else {
             console.log("RESULT: NOT FAITHFUL");
         }
+
+        // STEP 9: Evaluate Answer Relevance
+        const relevancePrompt = `
+        You are an answer relevance evaluator.
+
+        Determine whether the generated answer directly
+        addresses the user's question.
+
+        Question:
+        ${item.question}
+
+        Generated answer:
+        ${answer}
+
+        Return ONLY valid JSON:
+
+        {
+            "relevant": true,
+            "reason": "..."
+        }
+
+        Set relevant to:
+        - true if the answer directly and meaningfully addresses
+        the question
+        - false if the answer is unrelated, off-topic,
+        or does not answer the question
+
+        Do not use outside knowledge.
+        `;
+
+        const relevanceResponse =
+            await client.models.generateContent({
+                model: MODEL,
+                contents: relevancePrompt,
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+        const relevance =
+            JSON.parse(relevanceResponse.text);
+
+        console.log("\nANSWER RELEVANCE EVALUATION:");
+        console.log("Relevant:", relevance.relevant);
+        console.log("Reason:", relevance.reason);
+
+        if (relevance.relevant) {
+            totalAnswerRelevance++;
+            console.log("RESULT: RELEVANT");
+        } else {
+            console.log("RESULT: NOT RELEVANT");
+        }
     }
 
-    // STEP 9: Calculate average metrics
+    // STEP 10: Calculate average metrics
     const totalQuestions = evaluationData.length;
 
     const averageRecall =
@@ -272,6 +324,10 @@ try {
     const averageFaithfulness =
         totalFaithfulness / totalQuestions;
 
+    const averageAnswerRelevance =
+        totalAnswerRelevance / totalQuestions;
+
+    // STEP 11: Display final results
     console.log("\n=================================");
     console.log("FINAL RAG EVALUATION RESULTS");
 
@@ -295,11 +351,23 @@ try {
         (averageFaithfulness * 100).toFixed(2) + "%"
     );
 
+    console.log(
+        "AVERAGE ANSWER RELEVANCE:",
+        (averageAnswerRelevance * 100).toFixed(2) + "%"
+    );
+
     console.log("\nTOTAL QUESTIONS:", totalQuestions);
     console.log("FAITHFUL ANSWERS:", totalFaithfulness);
+    console.log("RELEVANT ANSWERS:", totalAnswerRelevance);
+
     console.log(
         "UNFAITHFUL ANSWERS:",
         totalQuestions - totalFaithfulness
+    );
+
+    console.log(
+        "IRRELEVANT ANSWERS:",
+        totalQuestions - totalAnswerRelevance
     );
 
 } catch (error) {
