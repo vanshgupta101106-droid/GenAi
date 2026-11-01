@@ -15,6 +15,8 @@ const client = new GoogleGenAI({
 });
 
 const COLLECTION_NAME = "employee_documents";
+const EMBEDDING_MODEL = "gemini-embedding-001";
+const MODEL = "gemini-3.1-flash-lite";
 
 const evaluationData = [
     {
@@ -52,244 +54,255 @@ const evaluationData = [
 
 try {
     let totalRecall = 0;
+    let totalContextPrecision = 0;
+    let totalContextRecall = 0;
+    let totalFaithfulness = 0;
 
     for (const item of evaluationData) {
         console.log("\n=================================");
-        console.log(`Evaluating question: ${item.question}`);
+        console.log("QUESTION:", item.question);
 
-        // 1. Create question embedding
-        const embeddingResponse = await client.models.embedContent({
-            model: "gemini-embedding-001",
-            contents: item.question
-        });
+        // STEP 1: Generate question embedding
+        const embeddingResponse =
+            await client.models.embedContent({
+                model: EMBEDDING_MODEL,
+                contents: item.question
+            });
 
         const queryEmbedding =
             embeddingResponse.embeddings[0].values;
 
-        // 2. Retrieve the top 3 documents from Qdrant
-        const searchResponse = await qdrant.query(
-            COLLECTION_NAME,
-            {
-                query: queryEmbedding,
-                limit: 3,
-                with_payload: true
-            }
-        );
+        // STEP 2: Retrieve top 3 documents
+        const searchResponse =
+            await qdrant.query(
+                COLLECTION_NAME,
+                {
+                    query: queryEmbedding,
+                    limit: 3,
+                    with_payload: true
+                }
+            );
 
-        // 3. Evaluate which relevant documents were retrieved
+        const retrievedPoints =
+            searchResponse.points;
+
+        console.log("\nRETRIEVED DOCUMENTS:");
+
+        retrievedPoints.forEach((result, index) => {
+            console.log("\nRank:", index + 1);
+            console.log("ID:", result.id);
+            console.log("Score:", result.score);
+            console.log("Text:", result.payload?.text);
+        });
+
+        // STEP 3: Calculate Recall@3
         let relevantRetrieved = 0;
 
         for (const relevantText of item.relevantTexts) {
-            const found = searchResponse.points.some(
-                retrievedResult =>
-                    retrievedResult.payload?.text
+            const found = retrievedPoints.some(
+                result =>
+                    result.payload?.text
                         ?.toLowerCase()
                         .includes(relevantText.toLowerCase())
             );
 
             if (found) {
-                console.log(`Found relevant text: "${relevantText}"`);
                 relevantRetrieved++;
-            } else {
-                console.log(`Missing relevant text: "${relevantText}"`);
             }
         }
 
-        // 4. Calculate Recall@3
         const recall =
             relevantRetrieved / item.relevantTexts.length;
 
-        console.log(
-            "Relevant documents:",
-            item.relevantTexts.length
-        );
-
-        console.log(
-            "Relevant documents retrieved:",
-            relevantRetrieved
-        );
-
-        console.log(
-            "Recall@3:",
-            recall.toFixed(2)
-        );
-
-        console.log(
-            "Recall@3 %:",
-            (recall * 100).toFixed(2) + "%"
-        );
+        console.log("\nRECALL@3:", recall.toFixed(2));
 
         totalRecall += recall;
+
+        // STEP 4: Calculate Context Precision
+        let relevantCount = 0;
+        let precisionSum = 0;
+
+        for (let i = 0; i < retrievedPoints.length; i++) {
+            const retrievedText =
+                retrievedPoints[i].payload?.text?.toLowerCase() || "";
+
+            const found = item.relevantTexts.some(
+                expectedText =>
+                    retrievedText.includes(expectedText.toLowerCase())
+            );
+
+            if (found) {
+                relevantCount++;
+
+                const precisionAtK =
+                    relevantCount / (i + 1);
+
+                precisionSum += precisionAtK;
+            }
+        }
+
+        const contextPrecision =
+            relevantCount > 0
+                ? precisionSum / relevantCount
+                : 0;
+
+        console.log(
+            "CONTEXT PRECISION:",
+            contextPrecision.toFixed(2)
+        );
+
+        totalContextPrecision += contextPrecision;
+
+        // STEP 5: Calculate Context Recall
+        const contextRecall =
+            relevantRetrieved / item.relevantTexts.length;
+
+        console.log(
+            "CONTEXT RECALL:",
+            contextRecall.toFixed(2)
+        );
+
+        totalContextRecall += contextRecall;
+
+        // STEP 6: Prepare context
+        const context =
+            retrievedPoints
+                .map(result => result.payload?.text || "")
+                .filter(Boolean)
+                .join("\n");
+
+        console.log("\nCONTEXT:");
+        console.log(context);
+
+        // STEP 7: Generate answer
+        const answerPrompt = `
+        Answer the question using only the provided context.
+
+        Context:
+        ${context || "No documents retrieved."}
+
+        Question:
+        ${item.question}
+
+        If the context does not contain the answer,
+        say that the information is unavailable.
+
+        Answer clearly and concisely.
+        `;
+
+        const answerResponse =
+            await client.models.generateContent({
+                model: MODEL,
+                contents: answerPrompt
+            });
+
+        const answer =
+            answerResponse.text.trim();
+
+        console.log("\nGENERATED ANSWER:");
+        console.log(answer);
+
+        // STEP 8: Evaluate Faithfulness
+        const faithfulnessPrompt = `
+        You are a faithfulness evaluator.
+
+        Determine whether the generated answer is fully supported
+        by the provided context.
+
+        Context:
+        ${context || "No documents retrieved."}
+
+        Question:
+        ${item.question}
+
+        Generated answer:
+        ${answer}
+
+        Return ONLY valid JSON:
+
+        {
+            "faithful": true,
+            "reason": "..."
+        }
+
+        Set faithful to:
+        - true if every factual claim in the answer is supported
+        by the context
+        - false if any factual claim is unsupported
+
+        Do not use outside knowledge.
+        `;
+
+        const faithfulnessResponse =
+            await client.models.generateContent({
+                model: MODEL,
+                contents: faithfulnessPrompt,
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+        const faithfulness =
+            JSON.parse(faithfulnessResponse.text);
+
+        console.log("\nFAITHFULNESS EVALUATION:");
+        console.log("Faithful:", faithfulness.faithful);
+        console.log("Reason:", faithfulness.reason);
+
+        if (faithfulness.faithful) {
+            console.log("RESULT: FAITHFUL");
+            totalFaithfulness++;
+        } else {
+            console.log("RESULT: NOT FAITHFUL");
+        }
     }
 
-    // 5. Calculate average Recall@3
+    // STEP 9: Calculate average metrics
+    const totalQuestions = evaluationData.length;
+
     const averageRecall =
-        totalRecall / evaluationData.length;
+        totalRecall / totalQuestions;
+
+    const averageContextPrecision =
+        totalContextPrecision / totalQuestions;
+
+    const averageContextRecall =
+        totalContextRecall / totalQuestions;
+
+    const averageFaithfulness =
+        totalFaithfulness / totalQuestions;
 
     console.log("\n=================================");
-    console.log("TOTAL QUESTIONS:", evaluationData.length);
-    console.log("AVERAGE RECALL@3:", averageRecall.toFixed(2));
+    console.log("FINAL RAG EVALUATION RESULTS");
 
     console.log(
-        "AVERAGE RECALL@3 %:",
+        "\nAVERAGE RECALL@3:",
         (averageRecall * 100).toFixed(2) + "%"
     );
 
-    let totalContextPrecision = 0;
-
-for (const item of evaluationData) {
-
-    const embeddingResponse =
-        await client.models.embedContent({
-            model: "gemini-embedding-001",
-            contents: item.question
-        });
-
-    const queryEmbedding =
-        embeddingResponse.embeddings[0].values;
-
-    const searchResponse =
-        await qdrant.query(
-            COLLECTION_NAME,
-            {
-                query: queryEmbedding,
-                limit: 3,
-                with_payload: true
-            }
-        );
-
-    let relevantCount = 0;
-    let precisionSum = 0;
-
-    for (let i = 0; i < searchResponse.points.length; i++) {
-
-        const retrievedResult =
-            searchResponse.points[i];
-
-        const found =
-            item.relevantTexts.some(
-                expectedText =>
-                    retrievedResult.payload.text
-                        .toLowerCase()
-                        .includes(
-                            expectedText.toLowerCase()
-                        )
-            );
-
-        if (found) {
-
-            relevantCount++;
-
-            const precisionAtK =
-                relevantCount / (i + 1);
-
-            precisionSum += precisionAtK;
-        }
-    }
-
-    let contextPrecision = 0;
-
-    if (relevantCount > 0) {
-        contextPrecision =
-            precisionSum / relevantCount;
-    }
-
     console.log(
-        "\nQuestion:",
-        item.question
+        "AVERAGE CONTEXT PRECISION:",
+        (averageContextPrecision * 100).toFixed(2) + "%"
     );
 
     console.log(
-        "Context Precision:",
-        contextPrecision
-    );
-
-    totalContextPrecision += contextPrecision;
-}
-
-const averageContextPrecision =
-    totalContextPrecision /
-    evaluationData.length;
-
-console.log(
-    "\nAVERAGE CONTEXT PRECISION:",
-    averageContextPrecision
-);
-
-let totalContextRecall = 0;
-
-for (const item of evaluationData) {
-
-    const embeddingResponse =
-        await client.models.embedContent({
-            model: "gemini-embedding-001",
-            contents: item.question
-        });
-
-    const queryEmbedding =
-        embeddingResponse.embeddings[0].values;
-
-    const searchResponse =
-        await qdrant.query(
-            COLLECTION_NAME,
-            {
-                query: queryEmbedding,
-                limit: 3,
-                with_payload: true
-            }
-        );
-
-    let retrievedRelevant = 0;
-
-    for (const expectedText of item.relevantTexts) {
-
-        const found =
-            searchResponse.points.some(
-                result =>
-                    result.payload.text
-                        .toLowerCase()
-                        .includes(
-                            expectedText.toLowerCase()
-                        )
-            );
-
-        if (found) {
-            retrievedRelevant++;
-        }
-    }
-
-    const contextRecall =
-        retrievedRelevant /
-        item.relevantTexts.length;
-
-    console.log(
-        "\nQuestion:",
-        item.question
+        "AVERAGE CONTEXT RECALL:",
+        (averageContextRecall * 100).toFixed(2) + "%"
     );
 
     console.log(
-        "Context Recall:",
-        contextRecall
+        "AVERAGE FAITHFULNESS:",
+        (averageFaithfulness * 100).toFixed(2) + "%"
     );
 
-    totalContextRecall += contextRecall;
-}
-
-const averageContextRecall =
-    totalContextRecall /
-    evaluationData.length;
-
-console.log(
-    "\nAVERAGE CONTEXT RECALL:",
-    averageContextRecall
-);
-
-console.log(
-    "AVERAGE CONTEXT RECALL %:",
-    (averageContextRecall * 100).toFixed(2) + "%"
-);
+    console.log("\nTOTAL QUESTIONS:", totalQuestions);
+    console.log("FAITHFUL ANSWERS:", totalFaithfulness);
+    console.log(
+        "UNFAITHFUL ANSWERS:",
+        totalQuestions - totalFaithfulness
+    );
 
 } catch (error) {
-    console.error("Evaluation failed:");
+    console.error("\nEvaluation failed:");
     console.error(error);
 }
