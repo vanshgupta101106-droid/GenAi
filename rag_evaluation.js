@@ -216,6 +216,78 @@ console.log(
     averageContextPrecision
 );
 
+let totalContextRecall = 0;
+
+for (const item of evaluationData) {
+
+    const embeddingResponse =
+        await client.models.embedContent({
+            model: "gemini-embedding-001",
+            contents: item.question
+        });
+
+    const queryEmbedding =
+        embeddingResponse.embeddings[0].values;
+
+    const searchResponse =
+        await qdrant.query(
+            COLLECTION_NAME,
+            {
+                query: queryEmbedding,
+                limit: 3,
+                with_payload: true
+            }
+        );
+
+    let retrievedRelevant = 0;
+
+    for (const expectedText of item.relevantTexts) {
+
+        const found =
+            searchResponse.points.some(
+                result =>
+                    result.payload.text
+                        .toLowerCase()
+                        .includes(
+                            expectedText.toLowerCase()
+                        )
+            );
+
+        if (found) {
+            retrievedRelevant++;
+        }
+    }
+
+    const contextRecall =
+        retrievedRelevant /
+        item.relevantTexts.length;
+
+    console.log(
+        "\nQuestion:",
+        item.question
+    );
+
+    console.log(
+        "Context Recall:",
+        contextRecall
+    );
+
+    totalContextRecall += contextRecall;
+}
+
+const averageContextRecall =
+    totalContextRecall /
+    evaluationData.length;
+
+console.log(
+    "\nAVERAGE CONTEXT RECALL:",
+    averageContextRecall
+);
+
+console.log(
+    "AVERAGE CONTEXT RECALL %:",
+    (averageContextRecall * 100).toFixed(2) + "%"
+);
 
 } catch (error) {
     console.error("Evaluation failed:");
