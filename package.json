@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "description": "",
-  "main": "server.js",
+  "main": "RAG/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node RAG/server.js",
+    "dev": "node --watch RAG/server.js"
     
   },
   "keywords": [],

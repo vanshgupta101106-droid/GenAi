@@ -689,7 +689,7 @@ console.log(
 console.log("\n=================================");
 
 fs.writeFileSync(
-    "evaluation-results.json",
+    new URL("./evaluation-results.json", import.meta.url),
     JSON.stringify(evaluationResults, null, 2)
 );
 
