@@ -1,8 +1,8 @@
-import dotenv from "dotenv";
+import "./loadEnv.js";
 import { GoogleGenAI } from "@google/genai";
 import { QdrantClient } from "@qdrant/js-client-rest";
 
-dotenv.config();
+
 
 const client = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY

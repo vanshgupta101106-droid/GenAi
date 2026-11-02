@@ -1,9 +1,9 @@
-import dotenv from "dotenv";
+import "./loadEnv.js";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 
-dotenv.config();
+
 
 
 // ===============================

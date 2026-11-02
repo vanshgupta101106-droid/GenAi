@@ -1,7 +1,7 @@
-import dotenv from "dotenv";
+import "./loadEnv.js";
 import { tavily } from "@tavily/core";
 
-dotenv.config();
+
 
 const tvly = tavily({
     apiKey: process.env.TAVILY_API_KEY

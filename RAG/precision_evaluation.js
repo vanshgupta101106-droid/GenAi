@@ -1,8 +1,8 @@
-import dotenv from "dotenv";
+import "./loadEnv.js";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { GoogleGenAI } from "@google/genai";
 
-dotenv.config();
+
 
 const qdrant = new QdrantClient({
     url: process.env.QDRANT_URL,
