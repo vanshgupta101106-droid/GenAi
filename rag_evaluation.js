@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { GoogleGenAI } from "@google/genai";
+import fs from "fs";
 
 dotenv.config();
 
@@ -122,20 +123,20 @@ async function retrieveDocuments(question) {
 async function generateAnswer(question, context) {
 
     const prompt = `
-    Answer the question using only the provided context.
+Answer the question using only the provided context.
 
-    Context:
-    ${context}
+Context:
+${context}
 
-    Question:
-    ${question}
+Question:
+${question}
 
-    Answer clearly and concisely.
-    `;
+Answer clearly and concisely.
+`;
 
     const response =
         await client.models.generateContent({
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.1-flash-lite",
             contents: prompt
         });
 
@@ -144,16 +145,32 @@ async function generateAnswer(question, context) {
 
 
 // ===============================
-// MAIN EVALUATION
+// EVALUATION COUNTERS
 // ===============================
 
 let totalRecall = 0;
+
 let totalContextPrecision = 0;
+
 let totalContextRecall = 0;
+
 let totalFaithfulness = 0;
+
 let totalAnswerRelevance = 0;
+
 let totalAnswerCorrectness = 0;
 
+
+// ===============================
+// STORE ALL EVALUATION RESULTS
+// ===============================
+
+const evaluationResults = [];
+
+
+// ===============================
+// MAIN EVALUATION
+// ===============================
 
 for (const item of evaluationData) {
 
@@ -161,12 +178,14 @@ for (const item of evaluationData) {
     console.log("QUESTION:", item.question);
 
 
-    // --------------------------------
-    // 1. RETRIEVE DOCUMENTS ONCE
-    // --------------------------------
+    // =================================
+    // 1. RETRIEVE DOCUMENTS
+    // =================================
 
     const retrievedDocuments =
-        await retrieveDocuments(item.question);
+        await retrieveDocuments(
+            item.question
+        );
 
 
     const retrievedContexts =
@@ -180,6 +199,7 @@ for (const item of evaluationData) {
 
 
     console.log("\nRETRIEVED CONTEXT:");
+
     console.log(context);
 
 
@@ -188,6 +208,7 @@ for (const item of evaluationData) {
     // =================================
 
     let relevantRetrieved = 0;
+
 
     for (const expectedText of item.contexts) {
 
@@ -201,7 +222,9 @@ for (const item of evaluationData) {
                         )
             );
 
+
         if (found) {
+
             relevantRetrieved++;
         }
     }
@@ -212,7 +235,10 @@ for (const item of evaluationData) {
         item.contexts.length;
 
 
-    console.log("\nRecall@3:", recall);
+    console.log(
+        "\nRecall@3:",
+        recall
+    );
 
 
     totalRecall += recall;
@@ -223,6 +249,7 @@ for (const item of evaluationData) {
     // =================================
 
     let relevantCount = 0;
+
     let precisionSum = 0;
 
 
@@ -251,10 +278,14 @@ for (const item of evaluationData) {
 
             relevantCount++;
 
-            const precisionAtK =
-                relevantCount / (i + 1);
 
-            precisionSum += precisionAtK;
+            const precisionAtK =
+                relevantCount /
+                (i + 1);
+
+
+            precisionSum +=
+                precisionAtK;
         }
     }
 
@@ -301,6 +332,7 @@ for (const item of evaluationData) {
 
 
         if (found) {
+
             retrievedRelevant++;
         }
     }
@@ -333,47 +365,85 @@ for (const item of evaluationData) {
 
 
     console.log("\nGENERATED ANSWER:");
+
     console.log(answer);
 
 
     console.log("\nGROUND TRUTH:");
+
     console.log(item.groundTruth);
 
 
     // =================================
-    // 6. FAITHFULNESS
+    // 6. CREATE EVALUATION RESULT
+    // =================================
+
+    const evaluationResult = {
+
+        question: item.question,
+
+        contexts: retrievedContexts,
+
+        answer: answer,
+
+        groundTruth: item.groundTruth
+
+    };
+
+
+    evaluationResults.push(
+        evaluationResult
+    );
+
+
+    console.log(
+        "\nEVALUATION RESULT:"
+    );
+
+    console.log(
+        evaluationResult
+    );
+
+
+    // =================================
+    // 7. FAITHFULNESS
     // =================================
 
     const faithfulnessPrompt = `
-    You are a faithfulness evaluator.
+You are a faithfulness evaluator.
 
-    Determine whether the answer is fully supported
-    by the provided context.
+Determine whether the answer is fully supported
+by the provided context.
 
-    Context:
-    ${context}
+Context:
+${context}
 
-    Answer:
-    ${answer}
+Answer:
+${answer}
 
-    Return ONLY valid JSON:
+Return ONLY valid JSON:
 
-    {
-        "faithful": true
-    }
+{
+    "faithful": true
+}
 
-    Use:
-    - true if the answer is fully supported by the context
-    - false if the answer contains information that is not
-    supported by the context
-    `;
+Use:
+- true if the answer is fully supported by the context
+- false if the answer contains information that is not
+  supported by the context
+`;
+
 
     const faithfulnessResponse =
         await client.models.generateContent({
-            model: "gemini-3.5-flash-lite",
-            contents: faithfulnessPrompt,
+            model: "gemini-3.1-flash-lite",
+
+            contents:
+                faithfulnessPrompt,
+
             config: {
-                responseMimeType: "application/json"
+                responseMimeType:
+                    "application/json"
             }
         });
 
@@ -390,47 +460,53 @@ for (const item of evaluationData) {
     );
 
 
-    if (faithfulness.faithful) {
+    if (
+        faithfulness.faithful
+    ) {
 
-        totalFaithfulness += 1;
+        totalFaithfulness++;
     }
 
 
     // =================================
-    // 7. ANSWER RELEVANCE
+    // 8. ANSWER RELEVANCE
     // =================================
 
     const relevancePrompt = `
-    You are an answer relevance evaluator.
+You are an answer relevance evaluator.
 
-    Determine whether the answer directly addresses
-    the user's question.
+Determine whether the answer directly addresses
+the user's question.
 
-    Question:
-    ${item.question}
+Question:
+${item.question}
 
-    Answer:
-    ${answer}
+Answer:
+${answer}
 
-    Return ONLY valid JSON:
+Return ONLY valid JSON:
 
-    {
-        "relevant": true
-    }
+{
+    "relevant": true
+}
 
-    Use:
-    - true if the answer directly addresses the question
-    - false if the answer does not answer the question
-    or is unrelated
-    `;
+Use:
+- true if the answer directly addresses the question
+- false if the answer does not answer the question
+  or is unrelated
+`;
 
 
     const relevanceResponse =
         await client.models.generateContent({
-            model: "gemini-3.5-flash-lite",
-            contents: relevancePrompt,
+            model: "gemini-3.1-flash-lite",
+
+            contents:
+                relevancePrompt,
+
             config: {
-                responseMimeType: "application/json"
+                responseMimeType:
+                    "application/json"
             }
         });
 
@@ -447,68 +523,86 @@ for (const item of evaluationData) {
     );
 
 
-    if (relevance.relevant) {
+    if (
+        relevance.relevant
+    ) {
 
-        totalAnswerRelevance += 1;
+        totalAnswerRelevance++;
     }
 
+
     // =================================
-    // 8. ANSWER CORRECTNESS
+    // 9. ANSWER CORRECTNESS
     // =================================
 
     const correctnessPrompt = `
-    You are an answer correctness evaluator.
+You are an answer correctness evaluator.
 
-    Compare the generated answer with the ground truth.
+Your job is to determine whether the generated answer
+correctly answers the question when compared with the
+ground truth.
 
-    Question:
-    ${item.question}
+Question:
+${item.question}
 
-    Generated answer:
-    ${answer}
+Generated answer:
+${answer}
 
-    Ground truth:
-    ${item.groundTruth}
+Ground truth:
+${item.groundTruth}
 
-    Return ONLY valid JSON:
+Return ONLY valid JSON:
 
-    {
-        "correct": true
-    }
+{
+    "correct": true
+}
 
-    Use:
-    - true if the generated answer is factually consistent
-    with the ground truth
-    - false if the generated answer contradicts the ground truth
-    or gives an incorrect answer
-    `;
+Use:
+- true if the generated answer is factually consistent
+  with the ground truth
+- false if the generated answer contradicts the ground truth
+  or gives an incorrect answer
+`;
+
 
     const correctnessResponse =
         await client.models.generateContent({
-            model: "gemini-3.5-flash-lite",
-            contents: correctnessPrompt,
+            model: "gemini-3.1-flash-lite",
+
+            contents:
+                correctnessPrompt,
+
             config: {
-                responseMimeType: "application/json"
+                responseMimeType:
+                    "application/json"
             }
         });
 
+
     const correctness =
-        JSON.parse(correctnessResponse.text);
+        JSON.parse(
+            correctnessResponse.text
+        );
+
 
     console.log(
         "Answer Correctness:",
         correctness
     );
 
-    if (correctness.correct) {
-        totalAnswerCorrectness += 1;
+
+    if (
+        correctness.correct
+    ) {
+
+        totalAnswerCorrectness++;
     }
 
 }
 
 
 // =================================
-// FINAL RESULTS
+// CALCULATE AVERAGES
 // =================================
 
 const averageRecall =
@@ -542,41 +636,63 @@ const averageAnswerCorrectness =
 
 
 // =================================
-// SUMMARY
+// FINAL SUMMARY
 // =================================
 
 console.log("\n\n=================================");
 console.log("        RAG EVALUATION SUMMARY");
 console.log("=================================");
 
+
 console.log(
     "\nRecall@3:",
     (averageRecall * 100).toFixed(2) + "%"
 );
+
 
 console.log(
     "Context Precision:",
     (averageContextPrecision * 100).toFixed(2) + "%"
 );
 
+
 console.log(
     "Context Recall:",
     (averageContextRecall * 100).toFixed(2) + "%"
 );
+
 
 console.log(
     "Faithfulness:",
     (averageFaithfulness * 100).toFixed(2) + "%"
 );
 
+
 console.log(
     "Answer Relevance:",
     (averageAnswerRelevance * 100).toFixed(2) + "%"
 );
+
 
 console.log(
     "Answer Correctness:",
     (averageAnswerCorrectness * 100).toFixed(2) + "%"
 );
 
+
+console.log(
+    "\nTotal Evaluation Records:",
+    evaluationResults.length
+);
+
+
 console.log("\n=================================");
+
+fs.writeFileSync(
+    "evaluation-results.json",
+    JSON.stringify(evaluationResults, null, 2)
+);
+
+console.log(
+    "\nEvaluation results saved to evaluation-results.json"
+);

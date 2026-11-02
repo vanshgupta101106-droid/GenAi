@@ -1,0 +1,52 @@
+[
+  {
+    "question": "How many vacation days do employees get?",
+    "contexts": [
+      "Employees receive 20 days of paid annual leave.",
+      "Employees can work remotely two days per week.",
+      "Employees must submit leave requests to their manager."
+    ],
+    "answer": "Employees get 20 days of paid annual leave.",
+    "groundTruth": "Employees receive 20 days of paid annual leave."
+  },
+  {
+    "question": "How many days can employees work remotely?",
+    "contexts": [
+      "Employees can work remotely two days per week.",
+      "Employees receive 20 days of paid annual leave.",
+      "Employees must submit leave requests to their manager."
+    ],
+    "answer": "Employees can work remotely two days per week.",
+    "groundTruth": "Employees can work remotely two days per week."
+  },
+  {
+    "question": "What healthcare benefit does the company provide?",
+    "contexts": [
+      "The company provides health insurance to full-time employees.",
+      "Employees receive 20 days of paid annual leave.",
+      "Employees can work remotely two days per week."
+    ],
+    "answer": "The company provides health insurance to full-time employees.",
+    "groundTruth": "The company provides health insurance to full-time employees."
+  },
+  {
+    "question": "Who must approve leave requests?",
+    "contexts": [
+      "Employees must submit leave requests to their manager.",
+      "Employees receive 20 days of paid annual leave.",
+      "The finance department prepares the company's annual budget."
+    ],
+    "answer": "The provided context does not state who must approve leave requests; it only states that employees must submit them to their manager.",
+    "groundTruth": "The provided information does not specify who approves leave requests; it only states that requests must be submitted to the employee's manager."
+  },
+  {
+    "question": "What is the company's leave policy?",
+    "contexts": [
+      "Employees receive 20 days of paid annual leave.",
+      "Employees must submit leave requests to their manager.",
+      "Employees can work remotely two days per week."
+    ],
+    "answer": "Employees receive 20 days of paid annual leave and must submit leave requests to their manager.",
+    "groundTruth": "Employees receive 20 days of paid annual leave, and leave requests must be submitted to the employee's manager."
+  }
+]
