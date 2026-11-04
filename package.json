@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@langchain/classic": "^1.0.57",
     "zod": "^4.6.7"
   }
 }
