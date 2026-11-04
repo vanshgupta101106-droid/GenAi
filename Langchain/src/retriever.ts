@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { Document } from "@langchain/core/documents";
+import { QdrantVectorStore } from "@langchain/qdrant";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
 
@@ -8,6 +9,31 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
     model: "gemini-embedding-001",
     apiKey: process.env.GEMINI_API_KEY
 });
+
+const qdrantStore = await QdrantVectorStore.fromExistingCollection(
+    embeddings,
+    {
+        url: process.env.QDRANT_URL!,
+        apiKey: process.env.QDRANT_API_KEY,
+        collectionName: "employee_documents",
+        contentPayloadKey: "text"
+    }
+);
+
+const results2 = await qdrantStore.similaritySearch(
+    "How many vacation days do employees get?",
+    3
+);
+
+console.log("\nQDRANT RESULTS:");
+
+for (const doc of results2) {
+    console.log("\nContent:");
+    console.log(doc.pageContent);
+
+    console.log("Metadata:");
+    console.log(doc.metadata);
+}
 
 const documents = [
     new Document({
