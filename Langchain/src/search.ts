@@ -13,7 +13,7 @@ const vectorStore =
             url: process.env.QDRANT_URL!,
             apiKey: process.env.QDRANT_API_KEY,
             collectionName: "developer_docs",
-            contentPayloadKey: "text"
+            contentPayloadKey: "content"
         }
     );
 
