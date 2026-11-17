@@ -6,12 +6,14 @@ const loader = new TextLoader(
 
 const documents = await loader.load();
 
-console.log("\nLOADED DOCUMENTS:");
+console.log("\nNUMBER OF DOCUMENTS:");
+console.log(documents.length);
 
-for (const doc of documents) {
-    console.log("\nContent:");
-    console.log(doc.pageContent);
+console.log("\nDOCUMENT:");
+console.log(documents[0]);
 
-    console.log("\nMetadata:");
-    console.log(doc.metadata);
-}
+console.log("\nPAGE CONTENT:");
+console.log(documents[0].pageContent);
+
+console.log("\nMETADATA:");
+console.log(documents[0].metadata);
