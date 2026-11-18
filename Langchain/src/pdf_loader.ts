@@ -3,6 +3,8 @@ import fs from "node:fs";
 import { PDFParse } from "pdf-parse";
 import { Document } from "@langchain/core/documents";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { QdrantVectorStore } from "@langchain/qdrant";
 
 const pdfBuffer = fs.readFileSync("docs/developer_guide.pdf");
 
@@ -55,5 +57,24 @@ for (let i = 0; i < Math.min(chunks.length, 5); i++) {
     console.log("\nMETADATA:");
     console.log(chunks[i].metadata);
 }
+
+const embeddings = new GoogleGenerativeAIEmbeddings({
+    model: "gemini-embedding-001",
+    apiKey: process.env.GEMINI_API_KEY
+});
+
+await QdrantVectorStore.fromDocuments(
+    chunks,
+    embeddings,
+    {
+        url: process.env.QDRANT_URL!,
+        apiKey: process.env.QDRANT_API_KEY,
+        collectionName: "redis_langchain_docs"
+    }
+);
+
+console.log(
+    "\nChunks successfully stored in Qdrant."
+);
 
 await parser.destroy();
