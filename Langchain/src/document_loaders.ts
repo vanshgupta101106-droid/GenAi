@@ -1,4 +1,5 @@
 import { TextLoader } from "@langchain/classic/document_loaders/fs/text";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 const loader = new TextLoader(
     "docs/nodejs-errors.md"
@@ -6,14 +7,23 @@ const loader = new TextLoader(
 
 const documents = await loader.load();
 
-console.log("\nNUMBER OF DOCUMENTS:");
+const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 100,
+    chunkOverlap: 20
+});
+
+const chunks = await splitter.splitDocuments(documents);
+
+console.log("\nNUMBER OF ORIGINAL DOCUMENTS:");
 console.log(documents.length);
 
-console.log("\nDOCUMENT:");
-console.log(documents[0]);
+console.log("\nNUMBER OF CHUNKS:");
+console.log(chunks.length);
 
-console.log("\nPAGE CONTENT:");
-console.log(documents[0].pageContent);
+for (let i = 0; i < chunks.length; i++) {
+    console.log(`\n--- CHUNK ${i + 1} ---`);
+    console.log(chunks[i].pageContent);
 
-console.log("\nMETADATA:");
-console.log(documents[0].metadata);
+    console.log("\nMetadata:");
+    console.log(chunks[i].metadata);
+}
