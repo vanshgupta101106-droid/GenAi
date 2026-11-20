@@ -38,20 +38,31 @@ const getServerStatus = tool(
 );
 
 const getServerLogs = tool(
-    async () => {
+    async ({ service }) => {
+
+        if (service !== "nodejs" && service !== "postgresql") {
+            throw new Error(
+                `Logs are not available for ${service}.`
+            );
+        }
+
         return {
+            service,
             errors: [
-                "ECONNREFUSED 127.0.0.1:5432",
-                "Redis connection timeout"
-            ],
-            lastChecked: "2026-09-18 00:30"
+                `ECONNREFUSED error detected in ${service}`,
+                "Connection failed on port 5432"
+            ]
         };
     },
     {
         name: "get_server_logs",
         description:
-            "Get recent errors and warnings from the Node.js server logs.",
-        schema: z.object({})
+            "Get recent errors from the logs of a specific service. Logs are available for nodejs and postgresql.",
+        schema: z.object({
+            service: z.string().describe(
+                "The service whose logs should be checked"
+            )
+        })
     }
 );
 
@@ -92,9 +103,21 @@ const result = await agent.invoke({
         {
             role: "user",
             content:
-                "Check my Node.js server and PostgreSQL database. If anything is unhealthy, tell me what is wrong."
+                "Check the PostgreSQL logs and tell me what errors are occurring."
         }
     ]
 });
 
 console.dir(result, { depth: null });
+
+const result1 = await agent.invoke({
+    messages: [
+        {
+            role: "user",
+            content:
+                "Check the MongoDB logs and tell me what errors are occurring."
+        }
+    ]
+});
+
+console.dir(result1, { depth: null });
