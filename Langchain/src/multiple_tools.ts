@@ -45,10 +45,56 @@ const modelWithTools = model.bindTools([
 ]);
 
 const question =
-    "Is my PostgreSQL database healthy?";
+    "Check whether my Node.js server and PostgreSQL database are healthy.";
 
-const response =
-    await modelWithTools.invoke(question);
+let messages: any[] = [question];
 
-console.log("\nTOOL CALLS:");
-console.dir(response.tool_calls, { depth: null });
+while (true) {
+    const response =
+        await modelWithTools.invoke(messages);
+
+    console.log("\nMODEL RESPONSE:");
+    console.dir(response.tool_calls, { depth: null });
+
+    // No tool requested → we're finished
+    if (!response.tool_calls?.length) {
+        console.log("\nFINAL ANSWER:");
+        console.log(response.content);
+        break;
+    }
+
+    // Add Gemini's response to the conversation
+    messages.push(response);
+
+    // Execute every requested tool
+    for (const toolCall of response.tool_calls) {
+
+        console.log(
+            `\nExecuting tool: ${toolCall.name}`
+        );
+
+        let toolResult;
+
+        if (toolCall.name === "get_database_status") {
+            toolResult =
+                await getDatabaseStatus.invoke(toolCall);
+        }
+
+        else if (toolCall.name === "get_server_status") {
+            toolResult =
+                await getServerStatus.invoke(toolCall);
+        }
+
+        else {
+            throw new Error(
+                `Unknown tool: ${toolCall.name}`
+            );
+        }
+
+        console.log("Tool result:");
+        console.log(toolResult);
+
+        // Give result back to Gemini
+        messages.push(toolResult);
+    }
+}
