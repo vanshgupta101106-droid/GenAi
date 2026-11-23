@@ -93,7 +93,7 @@ const saveMemory = async (
 const userId = "user-123";
 
 const userMessage =
-    "I use Node.js with PostgreSQL and TypeScript for my backend.";
+    "I switched my backend database from PostgreSQL to MongoDB.";
 
 
 // 7. Extract memories
@@ -119,11 +119,91 @@ ${userMessage}
 
 for (const memory of result.memories) {
 
-    await saveMemory(
-        userId,
-        memory.key,
-        memory.value
-    );
+    const saveMemory = async (
+        userId: string,
+        key: string,
+        value: string
+    ) => {
+
+        let memories: Record<
+            string,
+            Record<string, string>
+        > = {};
+
+        try {
+
+            const data = await fs.readFile(
+                MEMORY_FILE,
+                "utf-8"
+            );
+
+            memories = JSON.parse(data);
+
+        } catch {
+
+            memories = {};
+
+        }
+
+
+        // Create memory object for user
+        // if it doesn't exist
+
+        if (!memories[userId]) {
+
+            memories[userId] = {};
+
+        }
+
+
+        // Check whether this memory already exists
+
+        const existingValue =
+            memories[userId][key];
+
+
+        // Case 1: memory does not exist
+
+        if (existingValue === undefined) {
+
+            memories[userId][key] = value;
+
+            console.log(
+                `CREATED: ${key} → ${value}`
+            );
+
+        }
+
+
+        // Case 2: same memory already exists
+
+        else if (existingValue === value) {
+
+            console.log(
+                `UNCHANGED: ${key} → ${value}`
+            );
+
+        }
+
+
+        // Case 3: memory has changed
+
+        else {
+
+            console.log(
+                `UPDATED: ${key}: ${existingValue} → ${value}`
+            );
+
+            memories[userId][key] = value;
+
+        }
+
+
+        await fs.writeFile(
+            MEMORY_FILE,
+            JSON.stringify(memories, null, 2)
+        );
+    };
 
 }
 
