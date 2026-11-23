@@ -1,5 +1,6 @@
 {
   "user-123": {
-    "database": "PostgreSQL"
+    "database": "PostgreSQL",
+    "backend_tech_stack": "Node.js, PostgreSQL, and TypeScript"
   }
 }
