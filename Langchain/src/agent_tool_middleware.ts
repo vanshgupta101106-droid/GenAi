@@ -6,6 +6,10 @@ import {
     tool
 } from "langchain";
 
+import {
+    ToolMessage
+} from "@langchain/core/messages";
+
 import { z } from "zod";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
@@ -55,28 +59,36 @@ const toolMiddleware = createMiddleware({
 
         console.log("\n===== TOOL CALL =====");
 
-        const toolName = request.toolCall.name;
+        console.log(
+            "Tool:",
+            request.tool?.name
+        );
 
-        console.log("Tool:", toolName);
+        console.log(
+            "Arguments:",
+            request.toolCall.args
+        );
 
-        console.log("Arguments:", request.toolCall.args);
+        // Authorization
+        if (
+            request.tool?.name !== "get_database_status" &&
+            request.tool?.name !== "delete_database"
+        ) {
+
+            throw new Error(
+                `Tool "${request.tool?.name}" is not authorized.`
+            );
+        }
+
+        console.log("Tool authorized.");
 
         try {
 
-            // Authorization check
-            if (toolName !== "get_database_status" && toolName !== "delete_database") {
-
-                throw new Error(
-                    `Tool "${toolName}" is not authorized.`
-                );
-            }
-
-            console.log("Tool authorized.");
-
-            // Execute tool
             const result = await handler(request);
 
-            console.log("Tool execution completed.");
+            console.log(
+                "Tool execution completed."
+            );
 
             return result;
 
@@ -86,7 +98,26 @@ const toolMiddleware = createMiddleware({
 
             console.log(error);
 
-            throw error;
+            const toolCallId = request.toolCall.id;
+
+            if (!toolCallId) {
+                throw new Error(
+                    "Tool call ID is missing."
+                );
+            }
+
+            return new ToolMessage({
+
+                content: `Tool failed: ${
+                    error instanceof Error
+                        ? error.message
+                        : "Unknown tool error"
+                }`,
+
+                tool_call_id: toolCallId,
+
+                status: "error"
+            });
         }
     }
 });
