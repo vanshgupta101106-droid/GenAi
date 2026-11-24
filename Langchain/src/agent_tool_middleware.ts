@@ -11,28 +11,28 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
 // MODEL
 const model = new ChatGoogleGenerativeAI({
-    model: "gemini-3.6-flash",
+    model: "gemini-3.5-flash-lite",
     temperature: 0
 });
 
-// TOOL
+// TOOL 1
 const getDatabaseStatus = tool(
     async () => {
         console.log("\n>>> DATABASE TOOL EXECUTED");
 
-        return "PostgreSQL is running normally.";
+        throw new Error(
+            "PostgreSQL connection failed."
+        );
     },
     {
         name: "get_database_status",
-
         description:
             "Check the current PostgreSQL database status.",
-
         schema: z.object({})
     }
 );
 
-
+// TOOL 2
 const deleteDatabase = tool(
     async () => {
         console.log("\n>>> DELETE DATABASE TOOL EXECUTED");
@@ -41,10 +41,8 @@ const deleteDatabase = tool(
     },
     {
         name: "delete_database",
-
         description:
             "Delete the PostgreSQL database.",
-
         schema: z.object({})
     }
 );
@@ -63,20 +61,33 @@ const toolMiddleware = createMiddleware({
 
         console.log("Arguments:", request.toolCall.args);
 
-        // Authorization check
-        if (toolName !== "get_database_status") {
-            throw new Error(
-                `Tool "${toolName}" is not authorized.`
-            );
+        try {
+
+            // Authorization check
+            if (toolName !== "get_database_status" && toolName !== "delete_database") {
+
+                throw new Error(
+                    `Tool "${toolName}" is not authorized.`
+                );
+            }
+
+            console.log("Tool authorized.");
+
+            // Execute tool
+            const result = await handler(request);
+
+            console.log("Tool execution completed.");
+
+            return result;
+
+        } catch (error) {
+
+            console.log("\n===== TOOL ERROR =====");
+
+            console.log(error);
+
+            throw error;
         }
-
-        console.log("Tool authorized.");
-
-        const result = await handler(request);
-
-        console.log("Tool execution completed.");
-
-        return result;
     }
 });
 
@@ -91,18 +102,30 @@ const agent = createAgent({
 });
 
 // RUN AGENT
-const result = await agent.invoke({
-    messages: [
-        {
-            role: "user",
-            content: "Use the delete_database tool to delete the PostgreSQL database."
-        }
-    ]
-});
+try {
 
-// FINAL RESPONSE
-console.log("\n===== FINAL RESPONSE =====");
+    const result = await agent.invoke({
+        messages: [
+            {
+                role: "user",
+                content:
+                    "Use the delete_database tool to delete the PostgreSQL database."
+            }
+        ]
+    });
 
-console.log(
-    result.messages[result.messages.length - 1].content
-);
+    // FINAL RESPONSE
+    console.log("\n===== FINAL RESPONSE =====");
+
+    console.log(
+        result.messages[result.messages.length - 1].content
+    );
+
+} catch (error) {
+
+    console.log("\n===== AGENT ERROR =====");
+
+    console.log(
+        error instanceof Error ? error.message : error
+    );
+}
