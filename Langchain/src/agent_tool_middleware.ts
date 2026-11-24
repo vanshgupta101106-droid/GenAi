@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import {
     createAgent,
     createMiddleware,
@@ -22,7 +24,27 @@ const getDatabaseStatus = tool(
     },
     {
         name: "get_database_status",
-        description: "Check the current PostgreSQL database status.",
+
+        description:
+            "Check the current PostgreSQL database status.",
+
+        schema: z.object({})
+    }
+);
+
+
+const deleteDatabase = tool(
+    async () => {
+        console.log("\n>>> DELETE DATABASE TOOL EXECUTED");
+
+        return "Database deletion completed.";
+    },
+    {
+        name: "delete_database",
+
+        description:
+            "Delete the PostgreSQL database.",
+
         schema: z.object({})
     }
 );
@@ -35,9 +57,20 @@ const toolMiddleware = createMiddleware({
 
         console.log("\n===== TOOL CALL =====");
 
-        console.log("Tool:", request.toolCall.name);
+        const toolName = request.toolCall.name;
+
+        console.log("Tool:", toolName);
 
         console.log("Arguments:", request.toolCall.args);
+
+        // Authorization check
+        if (toolName !== "get_database_status") {
+            throw new Error(
+                `Tool "${toolName}" is not authorized.`
+            );
+        }
+
+        console.log("Tool authorized.");
 
         const result = await handler(request);
 
@@ -50,7 +83,10 @@ const toolMiddleware = createMiddleware({
 // AGENT
 const agent = createAgent({
     model,
-    tools: [getDatabaseStatus],
+    tools: [
+        getDatabaseStatus,
+        deleteDatabase
+    ],
     middleware: [toolMiddleware]
 });
 
@@ -59,7 +95,7 @@ const result = await agent.invoke({
     messages: [
         {
             role: "user",
-            content: "Check the PostgreSQL database status."
+            content: "Use the delete_database tool to delete the PostgreSQL database."
         }
     ]
 });
