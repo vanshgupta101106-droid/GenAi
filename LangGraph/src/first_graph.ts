@@ -9,55 +9,59 @@ import {
 
 
 const State = new StateSchema({
-    message: z.string()
+    question: z.string(),
+    answer: z.string()
 });
 
 
-const greetNode = async (
+const retrieveNode = async (
     state: typeof State.State
 ) => {
 
-    console.log("\n--- GREET NODE ---");
+    console.log("\n--- RETRIEVE NODE ---");
 
-    console.log("Received:", state.message);
+    console.log("Question:", state.question);
+    console.log("Answer:", state.answer);
 
     return {
-        message: "Hello! My name is LangGraph."
+        answer: "PostgreSQL is a relational database."
     };
 };
 
 
-const answerNode = async (
+const generateNode = async (
     state: typeof State.State
 ) => {
 
-    console.log("\n--- ANSWER NODE ---");
+    console.log("\n--- GENERATE NODE ---");
 
-    console.log("Received:", state.message);
+    console.log("Question:", state.question);
+    console.log("Answer:", state.answer);
 
     return {
-        message: `${state.message} Nice to meet you!`
+        answer: `${state.answer} It is commonly used for backend applications.`
     };
 };
 
 
 const graph = new StateGraph(State)
 
-    .addNode("greet", greetNode)
+    .addNode("retrieve", retrieveNode)
 
-    .addNode("answer", answerNode)
+    .addNode("generate", generateNode)
 
-    .addEdge(START, "greet")
+    .addEdge(START, "retrieve")
 
-    .addEdge("greet", "answer")
+    .addEdge("retrieve", "generate")
 
-    .addEdge("answer", END)
+    .addEdge("generate", END)
 
     .compile();
 
 
 const result = await graph.invoke({
-    message: "Hello"
+    question: "What is PostgreSQL?",
+    answer: ""
 });
 
 
