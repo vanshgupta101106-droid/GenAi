@@ -124,7 +124,7 @@ const graph = new StateGraph(State)
 // -------------------------
 
 const result = await graph.invoke({
-    question: "Why am I getting ECONNREFUSED from PostgreSQL?",
+    question: "What is the difference between TCP and UDP?",
     route: "",
     answer: ""
 });
