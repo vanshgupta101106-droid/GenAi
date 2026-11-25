@@ -8,46 +8,59 @@ import {
 } from "@langchain/langgraph";
 
 
-// STATE
 const State = new StateSchema({
     message: z.string()
 });
 
 
-// NODE
-const helloNode = async (
+const greetNode = async (
     state: typeof State.State
 ) => {
 
-    console.log("Inside helloNode");
+    console.log("\n--- GREET NODE ---");
 
-    console.log("Current message:", state.message);
+    console.log("Received:", state.message);
 
     return {
-        message: "Hello from LangGraph!"
+        message: "Hello! My name is LangGraph."
     };
 };
 
 
-// GRAPH
+const answerNode = async (
+    state: typeof State.State
+) => {
+
+    console.log("\n--- ANSWER NODE ---");
+
+    console.log("Received:", state.message);
+
+    return {
+        message: `${state.message} Nice to meet you!`
+    };
+};
+
+
 const graph = new StateGraph(State)
 
-    .addNode("hello", helloNode)
+    .addNode("greet", greetNode)
 
-    .addEdge(START, "hello")
+    .addNode("answer", answerNode)
 
-    .addEdge("hello", END)
+    .addEdge(START, "greet")
+
+    .addEdge("greet", "answer")
+
+    .addEdge("answer", END)
 
     .compile();
 
 
-// EXECUTE GRAPH
 const result = await graph.invoke({
-    message: "Hello World!"
+    message: "Hello"
 });
 
 
-// FINAL OUTPUT
 console.log("\n===== FINAL STATE =====");
 
 console.log(result);
