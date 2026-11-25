@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import {
     StateGraph,
     StateSchema,
@@ -7,64 +6,128 @@ import {
     END
 } from "@langchain/langgraph";
 
-
 const State = new StateSchema({
     question: z.string(),
+    route: z.string(),
     answer: z.string()
 });
 
 
-const retrieveNode = async (
+// -------------------------
+// 1. CLASSIFY NODE
+// -------------------------
+
+const classifyNode = async (
     state: typeof State.State
 ) => {
 
-    console.log("\n--- RETRIEVE NODE ---");
-
+    console.log("\n--- CLASSIFY NODE ---");
     console.log("Question:", state.question);
-    console.log("Answer:", state.answer);
+
+    const question = state.question.toLowerCase();
+
+    const technicalKeywords = [
+        "postgresql",
+        "database",
+        "node.js",
+        "node",
+        "api",
+        "error",
+        "server",
+        "redis",
+        "docker",
+        "code"
+    ];
+
+    const isTechnical = technicalKeywords.some(
+        keyword => question.includes(keyword)
+    );
+
+    const route = isTechnical
+        ? "technical"
+        : "general";
+
+    console.log("Route:", route);
 
     return {
-        answer: "PostgreSQL is a relational database."
+        route
     };
 };
 
 
-const generateNode = async (
+// -------------------------
+// 2. TECHNICAL NODE
+// -------------------------
+
+const technicalNode = async (
     state: typeof State.State
 ) => {
 
-    console.log("\n--- GENERATE NODE ---");
-
-    console.log("Question:", state.question);
-    console.log("Answer:", state.answer);
+    console.log("\n--- TECHNICAL NODE ---");
 
     return {
-        answer: `${state.answer} It is commonly used for backend applications.`
+        answer: `Technical request detected: "${state.question}"`
     };
 };
 
+
+// -------------------------
+// 3. GENERAL NODE
+// -------------------------
+
+const generalNode = async (
+    state: typeof State.State
+) => {
+
+    console.log("\n--- GENERAL NODE ---");
+
+    return {
+        answer: `General request detected: "${state.question}"`
+    };
+};
+
+
+// -------------------------
+// 4. BUILD GRAPH
+// -------------------------
 
 const graph = new StateGraph(State)
 
-    .addNode("retrieve", retrieveNode)
+    .addNode("classify", classifyNode)
 
-    .addNode("generate", generateNode)
+    .addNode("technical", technicalNode)
 
-    .addEdge(START, "retrieve")
+    .addNode("general", generalNode)
 
-    .addEdge("retrieve", "generate")
+    .addEdge(START, "classify")
 
-    .addEdge("generate", END)
+    .addConditionalEdges(
+        "classify",
+
+        (state) => state.route,
+
+        {
+            technical: "technical",
+            general: "general"
+        }
+    )
+
+    .addEdge("technical", END)
+
+    .addEdge("general", END)
 
     .compile();
 
 
+// -------------------------
+// 5. RUN GRAPH
+// -------------------------
+
 const result = await graph.invoke({
-    question: "What is PostgreSQL?",
+    question: "Why am I getting ECONNREFUSED from PostgreSQL?",
+    route: "",
     answer: ""
 });
 
-
 console.log("\n===== FINAL STATE =====");
-
 console.log(result);
